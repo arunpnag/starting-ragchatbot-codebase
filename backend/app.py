@@ -40,10 +40,17 @@ class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
 
+class Source(BaseModel):
+    """Represents a source citation with optional lesson link"""
+    text: str                           # Display text for the source
+    link: Optional[str] = None          # Optional lesson link URL
+    course: str                         # Course title
+    lesson: Optional[int] = None        # Lesson number if applicable
+
 class QueryResponse(BaseModel):
     """Response model for course queries"""
     answer: str
-    sources: List[str]
+    sources: List[Source]
     session_id: str
 
 class CourseStats(BaseModel):
@@ -65,12 +72,30 @@ async def query_documents(request: QueryRequest):
         # Process query using RAG system
         answer, sources = rag_system.query(request.query, session_id)
         
+        # Convert source objects to Source model instances
+        source_objects = []
+        for source in sources:
+            if isinstance(source, dict):
+                # New format with lesson links
+                source_objects.append(Source(**source))
+            else:
+                # Legacy string format - convert to Source object
+                source_objects.append(Source(
+                    text=source,
+                    link=None,
+                    course=source,  # Fallback - use text as course name
+                    lesson=None
+                ))
+        
         return QueryResponse(
             answer=answer,
-            sources=sources,
+            sources=source_objects,
             session_id=session_id
         )
     except Exception as e:
+        print(f"Query error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/courses", response_model=CourseStats)

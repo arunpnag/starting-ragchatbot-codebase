@@ -122,10 +122,29 @@ function addMessage(content, type, sources = null, isWelcome = false) {
     let html = `<div class="message-content">${displayContent}</div>`;
     
     if (sources && sources.length > 0) {
+        // Format sources with clickable links
+        const formattedSources = sources.map(source => {
+            // Handle new API format with structured source objects
+            if (typeof source === 'object' && source !== null && source.text) {
+                // New format with lesson links
+                if (source.link && source.link.trim()) {
+                    return `<a href="${escapeHtml(source.link)}" target="_blank" rel="noopener noreferrer" class="source-link">${escapeHtml(source.text)}</a>`;
+                } else {
+                    return escapeHtml(source.text);
+                }
+            } else if (typeof source === 'string') {
+                // Legacy string format
+                return escapeHtml(source);
+            } else {
+                // Fallback for unexpected formats
+                return escapeHtml(String(source));
+            }
+        });
+        
         html += `
             <details class="sources-collapsible">
                 <summary class="sources-header">Sources</summary>
-                <div class="sources-content">${sources.join(', ')}</div>
+                <div class="sources-content">${formattedSources.join(', ')}</div>
             </details>
         `;
     }
