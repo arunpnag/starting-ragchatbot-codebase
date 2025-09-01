@@ -5,7 +5,7 @@ const API_URL = '/api';
 let currentSessionId = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
+let chatMessages, chatInput, sendButton, totalCourses, courseTitles, newChatButton;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sendButton = document.getElementById('sendButton');
     totalCourses = document.getElementById('totalCourses');
     courseTitles = document.getElementById('courseTitles');
+    newChatButton = document.getElementById('newChatButton');
     
     setupEventListeners();
     createNewSession();
@@ -28,6 +29,9 @@ function setupEventListeners() {
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
     });
+    
+    // New chat functionality
+    newChatButton.addEventListener('click', startNewChat);
     
     
     // Suggested questions
@@ -169,6 +173,55 @@ async function createNewSession() {
     currentSessionId = null;
     chatMessages.innerHTML = '';
     addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
+}
+
+async function startNewChat() {
+    try {
+        // Disable the new chat button during the request
+        newChatButton.disabled = true;
+        newChatButton.textContent = 'STARTING...';
+        
+        // Call the backend to clear session and get new session ID
+        const response = await fetch(`${API_URL}/new-chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                session_id: currentSessionId
+            })
+        });
+
+        if (!response.ok) throw new Error('Failed to start new chat');
+        
+        const data = await response.json();
+        
+        // Update session ID
+        currentSessionId = data.session_id;
+        
+        // Clear chat messages and show welcome message
+        chatMessages.innerHTML = '';
+        addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
+        
+        // Clear input field if it has content
+        if (chatInput.value.trim()) {
+            chatInput.value = '';
+        }
+        
+        // Focus on input
+        chatInput.focus();
+        
+    } catch (error) {
+        console.error('Error starting new chat:', error);
+        // Fallback to client-side only clearing if backend fails
+        currentSessionId = null;
+        chatMessages.innerHTML = '';
+        addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
+    } finally {
+        // Re-enable the button
+        newChatButton.disabled = false;
+        newChatButton.textContent = '+ NEW CHAT';
+    }
 }
 
 // Load course statistics
