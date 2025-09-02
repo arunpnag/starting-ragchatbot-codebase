@@ -126,6 +126,107 @@ class CourseSearchTool(Tool):
         
         return "\n\n".join(formatted)
 
+class CourseOutlineTool(Tool):
+    """Tool for retrieving course outline information including lessons"""
+    
+    def __init__(self, vector_store: VectorStore):
+        self.store = vector_store
+        self.last_sources = []  # Track sources from last query
+    
+    def get_tool_definition(self) -> Dict[str, Any]:
+        """Return Anthropic tool definition for this tool"""
+        return {
+            "name": "get_course_outline",
+            "description": "Get complete course outline including title, course link, and all lesson details",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "course_title": {
+                        "type": "string",
+                        "description": "Course title (partial matches work, e.g. 'MCP', 'Introduction')"
+                    }
+                },
+                "required": ["course_title"]
+            }
+        }
+    
+    def execute(self, course_title: str) -> str:
+        """
+        Execute the course outline tool with given course title.
+        
+        Args:
+            course_title: Course title to get outline for
+            
+        Returns:
+            Formatted course outline or error message
+        """
+        
+        # Resolve course name using vector store's fuzzy matching
+        resolved_title = self.store._resolve_course_name(course_title)
+        if not resolved_title:
+            return f"No course found matching '{course_title}'"
+        
+        # Get course metadata directly from the catalog
+        try:
+            results = self.store.course_catalog.get(ids=[resolved_title])
+            if not results or not results['metadatas']:
+                return f"No course metadata found for '{resolved_title}'"
+            
+            metadata = results['metadatas'][0]
+            
+            # Extract course information
+            course_title = metadata.get('title', 'Unknown Course')
+            course_link = metadata.get('course_link')
+            instructor = metadata.get('instructor')
+            lessons_json = metadata.get('lessons_json', '[]')
+            
+            # Parse lessons
+            import json
+            try:
+                lessons = json.loads(lessons_json)
+            except json.JSONDecodeError:
+                lessons = []
+            
+            # Format the outline
+            outline_parts = [f"**Course:** {course_title}"]
+            
+            if instructor:
+                outline_parts.append(f"**Instructor:** {instructor}")
+            
+            if course_link:
+                outline_parts.append(f"**Course Link:** {course_link}")
+            
+            if lessons:
+                outline_parts.append(f"**Total Lessons:** {len(lessons)}")
+                outline_parts.append("\n**Lesson Outline:**")
+                
+                for lesson in sorted(lessons, key=lambda x: x.get('lesson_number', 0)):
+                    lesson_num = lesson.get('lesson_number', 'N/A')
+                    lesson_title = lesson.get('lesson_title', 'Untitled')
+                    lesson_link = lesson.get('lesson_link')
+                    
+                    lesson_line = f"{lesson_num}. {lesson_title}"
+                    if lesson_link:
+                        lesson_line += f" - [Link]({lesson_link})"
+                    outline_parts.append(lesson_line)
+            else:
+                outline_parts.append("**No lessons available**")
+            
+            # Store source information for UI
+            source = {
+                'text': course_title,
+                'link': course_link,
+                'course': course_title,
+                'lesson': None
+            }
+            self.last_sources = [source]
+            
+            return "\n".join(outline_parts)
+            
+        except Exception as e:
+            return f"Error retrieving course outline: {str(e)}"
+
+
 class ToolManager:
     """Manages available tools for the AI"""
     
